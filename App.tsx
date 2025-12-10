@@ -3,7 +3,8 @@ import { Sidebar } from './components/Sidebar';
 import { MainLayout } from './components/MainLayout';
 import { Auth } from './components/Auth';
 import { LandingPage } from './components/LandingPage';
-import { AppMode } from './types';
+import { DemoControls } from './components/DemoControls';
+import { AppMode, UserRole } from './types';
 import { Menu, X, Loader2 } from 'lucide-react';
 import { supabase } from './services/supabase';
 
@@ -14,6 +15,8 @@ const App: React.FC = () => {
   
   const [mode, setMode] = useState<AppMode>(AppMode.CITIZEN);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // Swipe Logic Refs
   const touchStart = useRef<number | null>(null);
   const touchEnd = useRef<number | null>(null);
 
@@ -21,6 +24,8 @@ const App: React.FC = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setAuthLoading(false);
+      // Reset mode on login
+      if (session) setMode(AppMode.CITIZEN);
     });
 
     const {
@@ -28,23 +33,44 @@ const App: React.FC = () => {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setAuthLoading(false);
+      if (session) setMode(AppMode.CITIZEN);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
+  // Mode Protection Logic
+  const userRole = session?.user?.user_metadata?.role || UserRole.CITIZEN;
+
+  const canAccessMode = (targetMode: AppMode) => {
+    if (targetMode === AppMode.CITIZEN) return true;
+    if (targetMode === AppMode.INDUSTRY && (userRole === UserRole.INDUSTRY || userRole === UserRole.GOVERNMENT)) return true;
+    if (targetMode === AppMode.GOVERNMENT && userRole === UserRole.GOVERNMENT) return true;
+    return false;
+  };
+
+  const handleSetMode = (newMode: AppMode) => {
+    if (canAccessMode(newMode)) {
+      setMode(newMode);
+    } else {
+      alert("Access Denied: You do not have permission to view this dashboard.");
+    }
+  };
+
+  const handleLoadDemoData = () => {
+    alert("Demo Data Loaded! (Simulated)");
+    // In a real implementation, this would update context/state with mock arrays
+  };
+
   // Swipe logic
   const minSwipeDistance = 50;
-
   const onTouchStart = (e: React.TouchEvent) => {
     touchEnd.current = null;
     touchStart.current = e.targetTouches[0].clientX;
   };
-
   const onTouchMove = (e: React.TouchEvent) => {
     touchEnd.current = e.targetTouches[0].clientX;
   };
-
   const onTouchEnd = () => {
     if (!touchStart.current || !touchEnd.current) return;
     const distance = touchStart.current - touchEnd.current;
@@ -55,14 +81,16 @@ const App: React.FC = () => {
     const currentIndex = modes.indexOf(mode);
 
     if (isLeftSwipe) {
-      // Next Mode
+      // Try next mode
       if (currentIndex < modes.length - 1) {
-        setMode(modes[currentIndex + 1]);
+        const nextMode = modes[currentIndex + 1];
+        if (canAccessMode(nextMode)) setMode(nextMode);
       }
     } else if (isRightSwipe) {
-      // Previous Mode
+      // Try prev mode
       if (currentIndex > 0) {
-        setMode(modes[currentIndex - 1]);
+        const prevMode = modes[currentIndex - 1];
+        if (canAccessMode(prevMode)) setMode(prevMode);
       }
     }
   };
@@ -107,14 +135,14 @@ const App: React.FC = () => {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-40 bg-slate-950/90 md:hidden pt-16 animate-in fade-in duration-200">
            <div className="h-full" onClick={(e) => e.stopPropagation()}>
-             <Sidebar currentMode={mode} setMode={(m) => { setMode(m); setMobileMenuOpen(false); }} user={session.user} />
+             <Sidebar currentMode={mode} setMode={(m) => { handleSetMode(m); setMobileMenuOpen(false); }} user={session.user} />
            </div>
         </div>
       )}
 
       {/* Desktop Sidebar */}
       <div className="hidden md:flex flex-none h-full">
-        <Sidebar currentMode={mode} setMode={setMode} user={session.user} />
+        <Sidebar currentMode={mode} setMode={handleSetMode} user={session.user} />
       </div>
 
       {/* Main Content Area */}
@@ -123,6 +151,12 @@ const App: React.FC = () => {
         <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-slate-900 to-transparent pointer-events-none -z-10"></div>
         
         <MainLayout mode={mode} />
+        
+        <DemoControls 
+          currentMode={mode} 
+          onLoadDemoData={handleLoadDemoData}
+          onSetMode={handleSetMode}
+        />
       </main>
     </div>
   );

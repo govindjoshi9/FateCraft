@@ -1,6 +1,6 @@
 import React from 'react';
-import { Leaf, Building2, Landmark, User, Settings, LogOut } from 'lucide-react';
-import { AppMode } from '../types';
+import { Leaf, Building2, Landmark, User, LogOut } from 'lucide-react';
+import { AppMode, UserRole } from '../types';
 import { supabase } from '../services/supabase';
 
 interface SidebarProps {
@@ -10,11 +10,16 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentMode, setMode, user }) => {
-  const navItems = [
-    { mode: AppMode.CITIZEN, label: 'Citizen Mode', icon: Leaf, color: 'text-emerald-500' },
-    { mode: AppMode.INDUSTRY, label: 'Industry Mode', icon: Building2, color: 'text-blue-500' },
-    { mode: AppMode.GOVERNMENT, label: 'Government Mode', icon: Landmark, color: 'text-purple-500' },
+  const userRole = user?.user_metadata?.role || UserRole.CITIZEN;
+
+  // Role-based navigation filtering
+  const allNavItems = [
+    { mode: AppMode.CITIZEN, label: 'Citizen Mode', icon: Leaf, color: 'text-emerald-500', allowedRoles: [UserRole.CITIZEN, UserRole.INDUSTRY, UserRole.GOVERNMENT] },
+    { mode: AppMode.INDUSTRY, label: 'Industry Mode', icon: Building2, color: 'text-blue-500', allowedRoles: [UserRole.INDUSTRY, UserRole.GOVERNMENT] },
+    { mode: AppMode.GOVERNMENT, label: 'Government Mode', icon: Landmark, color: 'text-purple-500', allowedRoles: [UserRole.GOVERNMENT] },
   ];
+
+  const visibleNavItems = allNavItems.filter(item => item.allowedRoles.includes(userRole));
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -32,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentMode, setMode, user }) 
 
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-2">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = currentMode === item.mode;
           return (
             <button
@@ -59,16 +64,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentMode, setMode, user }) 
 
       {/* User Footer */}
       <div className="p-4 border-t border-slate-800">
-        <div className="flex items-center gap-3 px-2 py-2 rounded-lg bg-slate-800/30 border border-slate-800">
+        <div className="flex items-center gap-3 px-2 py-2 rounded-lg bg-slate-800/30 border border-slate-800 group relative">
           <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 shrink-0">
             <User size={16} />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-slate-200 truncate">
-              {user?.email?.split('@')[0] || 'User'}
+              {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}
             </p>
-            <p className="text-[10px] text-slate-500 truncate" title={user?.email}>
-              {user?.email || 'Guest'}
+            <p className="text-[10px] text-slate-500 truncate capitalize">
+              {userRole}
             </p>
           </div>
           <button 
