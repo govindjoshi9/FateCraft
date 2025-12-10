@@ -6,37 +6,82 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 const MODEL_TEXT = 'gemini-2.5-flash';
 const MODEL_COMPLEX = 'gemini-3-pro-preview';
 
+// Simple in-memory cache to optimize performance
+const requestCache = new Map<string, any>();
+
+const getCached = (key: string) => requestCache.get(key);
+const setCache = (key: string, value: any) => requestCache.set(key, value);
+
 export const generatePersonalizedFuture = async (
   imageBase64: string,
   age: string,
   location: string,
   lifestyle: string
 ): Promise<string> => {
+  const cacheKey = `future-${age}-${location}-${lifestyle}-${imageBase64.substring(0, 50)}`;
+  if (getCached(cacheKey)) return getCached(cacheKey);
+
   try {
-    const cleanBase64 = imageBase64.split(',')[1] || imageBase64;
+    // Dynamic MIME type extraction
+    let mimeType = "image/jpeg";
+    let cleanBase64 = imageBase64;
+
+    const matches = imageBase64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+    if (matches && matches.length === 3) {
+      mimeType = matches[1];
+      cleanBase64 = matches[2];
+    } else if (imageBase64.includes(',')) {
+      // Fallback for simple data URIs
+      const parts = imageBase64.split(',');
+      cleanBase64 = parts[1];
+      const mimeMatch = parts[0].match(/:(.*?);/);
+      if (mimeMatch) mimeType = mimeMatch[1];
+    }
+
+    // Relaxed prompt to avoid "Medical/Health" safety filters
     const prompt = `
 You are a climate impact storyteller. Create a personalized future narrative based on:
 USER PROFILE: Age: ${age}, Location: ${location}, Lifestyle: ${lifestyle}
-PHOTO ANALYSIS: (analyze uploaded photo for context)
-Based on IPCC projections, describe:
-1. PHYSICAL CHANGES BY 2050
-2. DAILY LIFE DISRUPTIONS
-3. 3 SPECIFIC ACTIONABLE SOLUTIONS
-Make it vivid, personal, slightly alarming but hopeful. Start with "In 2050, you will..."
-Return HTML with <h3> headings.
+PHOTO ANALYSIS: (Analyze the uploaded photo for general context, approximate age, and environment. Do not provide medical advice.)
+
+Based on IPCC projections for their specific region, describe:
+1. PHYSICAL CHANGES BY 2050 (impact of aging in a changing climate)
+2. DAILY LIFE DISRUPTIONS (specific to location, e.g., heat, water, economy)
+3. 3 SPECIFIC ACTIONABLE SOLUTIONS (lifestyle and community)
+
+Make it vivid, personal, and scientifically grounded but ultimately hopeful. Start with "In 2050, you will..."
+Return HTML with <h3> headings for the sections. Do not use Markdown code blocks.
 `;
+
+    // Using gemini-2.5-flash for robust multimodal processing
     const response = await ai.models.generateContent({
-      model: MODEL_COMPLEX,
-      contents: { parts: [{ inlineData: { mimeType: "image/jpeg", data: cleanBase64 } }, { text: prompt }] }
+      model: 'gemini-2.5-flash',
+      contents: { 
+        parts: [
+          { inlineData: { mimeType: mimeType, data: cleanBase64 } }, 
+          { text: prompt }
+        ] 
+      }
     });
-    return response.text || "<p>Unable to generate narrative.</p>";
+
+    const result = response.text || "<p>Unable to generate narrative. The AI might have flagged the content as unsafe or sensitive.</p>";
+    setCache(cacheKey, result);
+    return result;
   } catch (error) {
     console.error("Gemini Personal Future Error:", error);
-    return "<h3>System Error</h3><p>We could not process your image at this time. Please try again.</p>";
+    return `
+      <h3>System Error</h3>
+      <p>We could not process your request.</p>
+      <p class="text-xs text-slate-500 mt-2">Error: ${(error as Error).message || "Unknown API Error"}</p>
+      <p class="text-sm mt-2">Please try a different photo or check your connection.</p>
+    `;
   }
 };
 
 export const analyzeIndustryReport = async (text: string): Promise<IndustryAnalysis> => {
+  const cacheKey = `industry-report-${text.substring(0, 100)}`;
+  if (getCached(cacheKey)) return getCached(cacheKey);
+
   try {
     const prompt = `
       Analyze this emissions report. Extract/Estimate:
@@ -78,7 +123,9 @@ export const analyzeIndustryReport = async (text: string): Promise<IndustryAnaly
         }
       }
     });
-    return JSON.parse(response.text || '{}');
+    const result = JSON.parse(response.text || '{}');
+    setCache(cacheKey, result);
+    return result;
   } catch (error) {
     console.error("Gemini Industry Error:", error);
     return {
@@ -89,6 +136,9 @@ export const analyzeIndustryReport = async (text: string): Promise<IndustryAnaly
 };
 
 export const generateSustainabilityRoadmap = async (industryContext: string): Promise<RoadmapItem[]> => {
+  const cacheKey = `roadmap-${industryContext}`;
+  if (getCached(cacheKey)) return getCached(cacheKey);
+
   try {
     const prompt = `
       Create a 5-year sustainability roadmap for a ${industryContext} company.
@@ -117,13 +167,18 @@ export const generateSustainabilityRoadmap = async (industryContext: string): Pr
         }
       }
     });
-    return JSON.parse(response.text || '[]');
+    const result = JSON.parse(response.text || '[]');
+    setCache(cacheKey, result);
+    return result;
   } catch (e) {
     return [];
   }
 };
 
 export const simulatePolicy = async (policy: string, region: string): Promise<PolicySimulation> => {
+  const cacheKey = `policy-${region}-${policy}`;
+  if (getCached(cacheKey)) return getCached(cacheKey);
+
   try {
     const prompt = `
       Simulate impact of policy: "${policy}" in ${region}.
@@ -150,7 +205,9 @@ export const simulatePolicy = async (policy: string, region: string): Promise<Po
         }
       }
     });
-    return JSON.parse(response.text || '{}');
+    const result = JSON.parse(response.text || '{}');
+    setCache(cacheKey, result);
+    return result;
   } catch (error) {
     return {
       co2Reduction: "N/A", economicImpact: "N/A", healthBenefits: "N/A",
@@ -160,6 +217,9 @@ export const simulatePolicy = async (policy: string, region: string): Promise<Po
 };
 
 export const calculateEnforcementAction = async (violation: string, entity: string): Promise<{ penalty: string, recommendation: string }> => {
+  const cacheKey = `enforcement-${entity}-${violation}`;
+  if (getCached(cacheKey)) return getCached(cacheKey);
+
   try {
     const prompt = `
       Calculate mock enforcement for: "${violation}" by "${entity}".
@@ -177,17 +237,23 @@ export const calculateEnforcementAction = async (violation: string, entity: stri
         }
       }
     });
-    return JSON.parse(response.text || '{"penalty": "Under Review", "recommendation": "Investigate"}');
+    const result = JSON.parse(response.text || '{"penalty": "Under Review", "recommendation": "Investigate"}');
+    setCache(cacheKey, result);
+    return result;
   } catch (e) {
     return { penalty: "$50,000 fine", recommendation: "Immediate audit required" };
   }
 };
 
 export const generateExecutiveReport = async (region: string, policyContext: string): Promise<string> => {
-  // Existing function retained for compatibility
+  const cacheKey = `report-${region}-${policyContext}`;
+  if (getCached(cacheKey)) return getCached(cacheKey);
+
   try {
     const prompt = `Generate Executive Climate Report for ${region}. Focus: ${policyContext}. Return HTML.`;
     const response = await ai.models.generateContent({ model: MODEL_COMPLEX, contents: prompt });
-    return response.text || "<p>Failed.</p>";
+    const result = response.text || "<p>Failed.</p>";
+    setCache(cacheKey, result);
+    return result;
   } catch (e) { return "<p>Error.</p>"; }
 };
