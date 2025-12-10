@@ -1,0 +1,5 @@
+{
+  "name": "FateCraft: Personal Climate Strategist",
+  "description": "A dark-themed, responsive dashboard for personal, industrial, and governmental climate strategy planning using Google Gemini for predictive scenarios and action plans.",
+  "requestFramePermissions": []
+}
