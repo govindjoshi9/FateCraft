@@ -59,9 +59,9 @@ export const CitizenLayout = () => {
         return;
     }
     
-    if (!window.confirm("This will use AI to create your personalized climate story. Proceed?")) return;
-
     setProcessingPersonal(true);
+    setPersonalResult(null); // Clear previous result for better UX
+
     try {
       const result = await generatePersonalizedFuture(userImage, age, location, lifestyle);
       setPersonalResult(result);
@@ -110,7 +110,7 @@ export const CitizenLayout = () => {
 
         <div className="flex flex-col h-full z-10 relative">
           
-          {!personalResult ? (
+          {!personalResult && !processingPersonal ? (
             <div className="flex flex-col h-full">
               <div className="text-center mb-6">
                 <h2 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-slate-100 mb-2">See Your 2050 Future</h2>
@@ -176,14 +176,7 @@ export const CitizenLayout = () => {
                         onClick={handleGeneratePersonal} disabled={!age || processingPersonal}
                         className={`w-full mt-2 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-medium py-3 rounded-lg shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center gap-2 ${processingPersonal ? 'opacity-80 cursor-wait' : 'hover:scale-[1.02] active:scale-[0.98]'}`}
                      >
-                        {processingPersonal ? (
-                          <>
-                            <Loader2 className="animate-spin" size={18} />
-                            Analyzing Future...
-                          </>
-                        ) : (
-                          "Generate My Climate Future"
-                        )}
+                        Generate My Climate Future
                      </button>
                   </div>
                 )}
@@ -200,10 +193,16 @@ export const CitizenLayout = () => {
                            <Skeleton className="h-4 w-32" />
                         </div>
                      </div>
-                     <Skeleton className="h-4 w-full mt-4" />
-                     <Skeleton className="h-4 w-full" />
-                     <Skeleton className="h-4 w-5/6" />
-                     <Skeleton className="h-32 w-full mt-4" />
+                     <div className="space-y-3 mt-4">
+                        <div className="flex items-center gap-2 text-emerald-500">
+                           <Loader2 className="animate-spin" size={16} />
+                           <span className="text-sm font-medium">Consulting climate models...</span>
+                        </div>
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-5/6" />
+                        <Skeleton className="h-32 w-full mt-4" />
+                     </div>
                   </div>
                ) : (
                  <>
@@ -221,7 +220,7 @@ export const CitizenLayout = () => {
                       </div>
                   </div>
                   <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                      <div className="prose prose-sm max-w-none dark:prose-invert prose-h3:text-emerald-600 dark:prose-h3:text-emerald-400 prose-p:text-slate-600 dark:prose-p:text-slate-300" dangerouslySetInnerHTML={{ __html: personalResult }} />
+                      <div className="prose prose-sm max-w-none dark:prose-invert prose-h3:text-emerald-600 dark:prose-h3:text-emerald-400 prose-p:text-slate-600 dark:prose-p:text-slate-300" dangerouslySetInnerHTML={{ __html: personalResult || '' }} />
                   </div>
                  </>
                )}

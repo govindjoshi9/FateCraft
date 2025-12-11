@@ -4,7 +4,7 @@ import { AppMode, ClimateAction, ClimateScenario, IndustryAnalysis, PolicySimula
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const MODEL_TEXT = 'gemini-2.5-flash';
-const MODEL_COMPLEX = 'gemini-3-pro-preview';
+const MODEL_COMPLEX = 'gemini-2.5-flash';
 
 // Simple in-memory cache to optimize performance
 const requestCache = new Map<string, any>();
@@ -18,7 +18,7 @@ export const generatePersonalizedFuture = async (
   location: string,
   lifestyle: string
 ): Promise<string> => {
-  const cacheKey = `future-${age}-${location}-${lifestyle}-${imageBase64.substring(0, 50)}`;
+  const cacheKey = `future-v2-${age}-${location}-${lifestyle}-${imageBase64.substring(0, 30)}`;
   if (getCached(cacheKey)) return getCached(cacheKey);
 
   try {
@@ -38,25 +38,38 @@ export const generatePersonalizedFuture = async (
       if (mimeMatch) mimeType = mimeMatch[1];
     }
 
-    // Relaxed prompt to avoid "Medical/Health" safety filters
+    // Safe Prompt: Explicitly avoids asking for biometric/medical analysis
     const prompt = `
-You are a climate impact storyteller. Create a personalized future narrative based on:
-USER PROFILE: Age: ${age}, Location: ${location}, Lifestyle: ${lifestyle}
-PHOTO ANALYSIS: (Analyze the uploaded photo for general context, approximate age, and environment. Do not provide medical advice.)
+      Act as a climate futurist storyteller.
+      
+      USER PROFILE:
+      - Current Age: ${age}
+      - Location: ${location}
+      - Lifestyle: ${lifestyle}
+      
+      TASK:
+      Write a "Day in the Life" narrative for this person in the year 2050.
+      Use the provided image ONLY for context on clothing style and general vibe. Do NOT analyze the face, estimate age, or provide medical commentary.
+      
+      CONTEXT:
+      Based on IPCC climate projections for ${location} in 2050 (e.g., temperature changes, sea levels, water availability):
+      
+      OUTPUT SECTIONS (HTML format with <h3> headers):
+      1. <h3>The World of 2050</h3>
+         (Describe the physical environment and local climate adaptations)
+      2. <h3>Your Daily Routine</h3>
+         (How their specific lifestyle has evolved to be resilient)
+      3. <h3>Community Solutions</h3>
+         (3 specific ways they are contributing to their local community)
 
-Based on IPCC projections for their specific region, describe:
-1. PHYSICAL CHANGES BY 2050 (impact of aging in a changing climate)
-2. DAILY LIFE DISRUPTIONS (specific to location, e.g., heat, water, economy)
-3. 3 SPECIFIC ACTIONABLE SOLUTIONS (lifestyle and community)
-
-Make it vivid, personal, and scientifically grounded but ultimately hopeful. Start with "In 2050, you will..."
-Return HTML with <h3> headings for the sections. Do not use Markdown code blocks.
-`;
+      Tone: Realistic but hopeful and empowering. Start with "In 2050..."
+    `;
 
     // Using gemini-2.5-flash for robust multimodal processing
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: { 
+        role: 'user',
         parts: [
           { inlineData: { mimeType: mimeType, data: cleanBase64 } }, 
           { text: prompt }
@@ -64,16 +77,21 @@ Return HTML with <h3> headings for the sections. Do not use Markdown code blocks
       }
     });
 
-    const result = response.text || "<p>Unable to generate narrative. The AI might have flagged the content as unsafe or sensitive.</p>";
+    const result = response.text;
+    
+    if (!result) {
+       throw new Error("Content generation was blocked by safety filters. Please try a different photo.");
+    }
+
     setCache(cacheKey, result);
     return result;
   } catch (error) {
     console.error("Gemini Personal Future Error:", error);
     return `
-      <h3>System Error</h3>
-      <p>We could not process your request.</p>
-      <p class="text-xs text-slate-500 mt-2">Error: ${(error as Error).message || "Unknown API Error"}</p>
-      <p class="text-sm mt-2">Please try a different photo or check your connection.</p>
+      <h3>Generation Failed</h3>
+      <p>We could not process your request at this time.</p>
+      <p class="text-xs text-slate-500 mt-2">Reason: ${(error as Error).message || "Unknown API Error"}</p>
+      <p class="text-sm mt-2">Tip: Try a photo that is not a close-up face shot, or ensure all details are filled.</p>
     `;
   }
 };
